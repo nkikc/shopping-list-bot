@@ -34,7 +34,10 @@ export default async function handler(req, res) {
       // URLパスをSlack Boltが期待する形式に修正
       const modifiedReq = {
         ...req,
-        url: '/slack/events'  // Slack Boltが期待するパス
+        url: '/slack/events',  // Slack Boltが期待するパス
+        headers: req.headers,  // ヘッダー情報を明示的に渡す
+        method: req.method,    // メソッド情報を明示的に渡す
+        body: req.body         // ボディ情報を明示的に渡す
       };
       
       await app.receiver.requestListener(modifiedReq, res);
