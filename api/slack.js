@@ -3,6 +3,9 @@ const { MessageParser } = require('../services/messageParser');
 const { BlockBuilder } = require('../services/blockBuilder');
 const { WebClient } = require('@slack/web-api');
 
+// 重複リクエストを防ぐためのイベントIDキャッシュ
+const processedEvents = new Set();
+
 export default async function handler(req, res) {
   try {
     console.log('=== API Request ===');
@@ -90,7 +93,16 @@ export default async function handler(req, res) {
         
         // app_mentionイベントを直接処理
         if (event.type === 'app_mention') {
+          // 重複リクエストチェック
+          const eventId = req.body.event_id || event.event_ts;
+          if (processedEvents.has(eventId)) {
+            console.log(`重複イベントをスキップ: ${eventId}`);
+            return res.status(200).json({ ok: true });
+          }
+          processedEvents.add(eventId);
+          
           console.log('=== メンションイベント受信 ===');
+          console.log('イベントID:', eventId);
           console.log('メッセージテキスト:', event.text);
           console.log('ユーザーID:', event.user);
           console.log('チャンネルID:', event.channel);
@@ -147,13 +159,43 @@ async function handleRegister(items, userId, channelId, slackClient) {
   try {
     const notionClient = new NotionClient();
     const registeredItems = [];
+    const skippedItems = [];
     
     for (const item of items) {
-      const notionId = await notionClient.addItem(item, userId);
-      registeredItems.push(item);
+      try {
+        // 重複チェック: 同じアイテムが未完了で存在するかチェック
+        const existingItems = await notionClient.getIncompleteItems();
+        const isDuplicate = existingItems.some(existingItem => 
+          existingItem.name.toLowerCase() === item.toLowerCase()
+        );
+        
+        if (isDuplicate) {
+          console.log(`重複アイテムをスキップ: ${item}`);
+          skippedItems.push(item);
+          continue;
+        }
+        
+        const notionId = await notionClient.addItem(item, userId);
+        registeredItems.push(item);
+        console.log(`アイテム登録完了: ${item} (ID: ${notionId})`);
+      } catch (error) {
+        console.error(`アイテム登録エラー (${item}):`, error);
+        // 個別アイテムのエラーは記録するが、処理は続行
+      }
     }
     
-    const message = `🛒 登録しました:\n${registeredItems.map(item => `• ${item}`).join('\n')}`;
+    let message = '';
+    if (registeredItems.length > 0) {
+      message += `🛒 登録しました:\n${registeredItems.map(item => `• ${item}`).join('\n')}`;
+    }
+    if (skippedItems.length > 0) {
+      if (message) message += '\n\n';
+      message += `⚠️ 既に登録済みのためスキップしました:\n${skippedItems.map(item => `• ${item}`).join('\n')}`;
+    }
+    if (registeredItems.length === 0 && skippedItems.length === 0) {
+      message = '❌ 登録できるアイテムがありませんでした。';
+    }
+    
     await slackClient.chat.postMessage({
       channel: channelId,
       text: message
