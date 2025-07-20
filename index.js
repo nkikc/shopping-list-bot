@@ -8,8 +8,7 @@ const { BlockBuilder } = require('./services/blockBuilder');
 const app = new App({
   token: process.env.SLACK_BOT_TOKEN,
   signingSecret: process.env.SLACK_SIGNING_SECRET,
-  socketMode: true,
-  appToken: process.env.SLACK_APP_TOKEN,
+  processBeforeResponse: true,
 });
 
 // Notionクライアントの初期化
@@ -99,6 +98,20 @@ async function handleList(say) {
     await say('リスト表示でエラーが発生しました。');
   }
 }
+
+// ヘルスチェック用エンドポイント
+app.receiver.app.get('/', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    message: '🛒 買い物リスト管理Bot is running!',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Slackイベント用エンドポイント
+app.receiver.app.post('/slack/events', (req, res) => {
+  res.status(200).send('OK');
+});
 
 // エラーハンドリング
 app.error((error) => {
