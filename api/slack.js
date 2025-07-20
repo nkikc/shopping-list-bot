@@ -1,4 +1,7 @@
-const app = require('../index');
+const { NotionClient } = require('../services/notionClient');
+const { MessageParser } = require('../services/messageParser');
+const { BlockBuilder } = require('../services/blockBuilder');
+const { WebClient } = require('@slack/web-api');
 
 export default async function handler(req, res) {
   try {
@@ -38,21 +41,42 @@ export default async function handler(req, res) {
         
         // app_mentionイベントを直接処理
         if (event.type === 'app_mention') {
-          await app.event('app_mention', { event, say: async (message) => {
-            // Slack APIを使用してメッセージを送信
-            const { WebClient } = require('@slack/web-api');
-            const client = new WebClient(process.env.SLACK_BOT_TOKEN);
+          console.log('=== メンションイベント受信 ===');
+          console.log('メッセージテキスト:', event.text);
+          console.log('ユーザーID:', event.user);
+          console.log('チャンネルID:', event.channel);
+          console.log('========================');
+          
+          // サービスを初期化
+          const notionClient = new NotionClient();
+          const messageParser = new MessageParser();
+          const blockBuilder = new BlockBuilder();
+          const slackClient = new WebClient(process.env.SLACK_BOT_TOKEN);
+          
+          try {
+            const command = messageParser.parseCommand(event.text);
+            console.log('解析結果:', command);
             
-            try {
-              await client.chat.postMessage({
+            if (command.type === 'register') {
+              console.log('登録処理を開始');
+              await handleRegister(command.items, event.user, event.channel, slackClient);
+            } else if (command.type === 'list') {
+              console.log('リスト表示処理を開始');
+              await handleList(event.channel, slackClient, notionClient, blockBuilder);
+            } else {
+              console.log('不明なコマンド、ヘルプを表示');
+              await slackClient.chat.postMessage({
                 channel: event.channel,
-                text: typeof message === 'string' ? message : message.text || '処理完了しました',
-                blocks: message.blocks
+                text: '使用方法:\n• `@ShoppingBot 登録 アイテム1、アイテム2` - アイテムを登録\n• `@ShoppingBot 教えて` - 未完了アイテムを表示'
               });
-            } catch (error) {
-              console.error('Slack API error:', error);
             }
-          }});
+          } catch (error) {
+            console.error('メンション処理エラー:', error);
+            await slackClient.chat.postMessage({
+              channel: event.channel,
+              text: 'エラーが発生しました。もう一度お試しください。'
+            });
+          }
         }
         
         return res.status(200).json({ ok: true });
@@ -66,5 +90,58 @@ export default async function handler(req, res) {
   } catch (error) {
     console.error('API Error:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+// 登録処理
+async function handleRegister(items, userId, channelId, slackClient) {
+  try {
+    const notionClient = new NotionClient();
+    const registeredItems = [];
+    
+    for (const item of items) {
+      const notionId = await notionClient.addItem(item, userId);
+      registeredItems.push(item);
+    }
+    
+    const message = `🛒 登録しました:\n${registeredItems.map(item => `• ${item}`).join('\n')}`;
+    await slackClient.chat.postMessage({
+      channel: channelId,
+      text: message
+    });
+  } catch (error) {
+    console.error('登録処理エラー:', error);
+    await slackClient.chat.postMessage({
+      channel: channelId,
+      text: '登録処理でエラーが発生しました。'
+    });
+  }
+}
+
+// リスト表示処理
+async function handleList(channelId, slackClient, notionClient, blockBuilder) {
+  try {
+    const items = await notionClient.getIncompleteItems();
+    
+    if (items.length === 0) {
+      await slackClient.chat.postMessage({
+        channel: channelId,
+        text: '📝 未完了のアイテムはありません。'
+      });
+      return;
+    }
+    
+    const blocks = blockBuilder.buildItemList(items);
+    await slackClient.chat.postMessage({
+      channel: channelId,
+      text: '🛒 未完了のアイテム一覧',
+      blocks: blocks
+    });
+  } catch (error) {
+    console.error('リスト表示エラー:', error);
+    await slackClient.chat.postMessage({
+      channel: channelId,
+      text: 'リスト表示でエラーが発生しました。'
+    });
   }
 } 
