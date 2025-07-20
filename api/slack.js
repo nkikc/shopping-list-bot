@@ -13,6 +13,14 @@ export default async function handler(req, res) {
 
     // Slackイベントの処理
     if (req.method === 'POST') {
+      // SlackのURL検証に対応
+      if (req.body && req.body.type === 'url_verification') {
+        return res.status(200).json({
+          challenge: req.body.challenge
+        });
+      }
+
+      // 通常のSlackイベント処理
       await app.receiver.requestListener(req, res);
       return;
     }
