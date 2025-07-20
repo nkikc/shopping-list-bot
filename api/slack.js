@@ -1,4 +1,4 @@
-const app = require('../index-vercel');
+const app = require('../index');
 
 export default async function handler(req, res) {
   try {

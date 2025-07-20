@@ -4,7 +4,7 @@ const { NotionClient } = require('./services/notionClient');
 const { MessageParser } = require('./services/messageParser');
 const { BlockBuilder } = require('./services/blockBuilder');
 
-// Slackアプリの初期化
+// Slackアプリの初期化（Vercel用）
 const app = new App({
   token: process.env.SLACK_BOT_TOKEN,
   signingSecret: process.env.SLACK_SIGNING_SECRET,
@@ -20,7 +20,6 @@ const blockBuilder = new BlockBuilder();
 app.event('app_mention', async ({ event, say }) => {
   try {
     console.log('=== メンションイベント受信 ===');
-    console.log('イベント全体:', JSON.stringify(event, null, 2));
     console.log('メッセージテキスト:', event.text);
     console.log('ユーザーID:', event.user);
     console.log('チャンネルID:', event.channel);
@@ -99,28 +98,10 @@ async function handleList(say) {
   }
 }
 
-// ヘルスチェック用エンドポイント
-app.receiver.app.get('/', (req, res) => {
-  res.status(200).json({
-    status: 'ok',
-    message: '🛒 買い物リスト管理Bot is running!',
-    timestamp: new Date().toISOString()
-  });
-});
-
-// Slackイベント用エンドポイント
-app.receiver.app.post('/slack/events', (req, res) => {
-  res.status(200).send('OK');
-});
-
 // エラーハンドリング
 app.error((error) => {
   console.error('Slackアプリエラー:', error);
 });
 
-// サーバー起動
-(async () => {
-  await app.start(process.env.PORT || 3000);
-  console.log('🛒 買い物リスト管理Botが起動しました！');
-  console.log(`🌐 ポート: ${process.env.PORT || 3000}`);
-})(); 
+// Vercel用のエクスポート
+module.exports = app; 
