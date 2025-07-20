@@ -32,18 +32,32 @@ export default async function handler(req, res) {
       }
 
       // インタラクティブコンポーネントの処理（ボタン押下など）
-      if (req.body && req.body.type === 'interactive_message' || req.body.type === 'block_actions') {
+      if (req.body && (req.body.type === 'interactive_message' || req.body.type === 'block_actions' || req.body.payload)) {
         console.log('=== インタラクティブコンポーネント受信 ===');
         console.log('ペイロード:', JSON.stringify(req.body, null, 2));
         console.log('========================');
+        
+        // URLエンコードされたペイロードを解析
+        let payload;
+        if (req.body.payload) {
+          try {
+            payload = JSON.parse(req.body.payload);
+            console.log('解析されたペイロード:', JSON.stringify(payload, null, 2));
+          } catch (error) {
+            console.error('ペイロード解析エラー:', error);
+            return res.status(400).json({ error: 'Invalid payload' });
+          }
+        } else {
+          payload = req.body;
+        }
         
         const slackClient = new WebClient(process.env.SLACK_BOT_TOKEN);
         
         try {
           // 完了ボタンの処理
-          if (req.body.actions && req.body.actions[0].action_id === 'complete_item') {
-            const notionId = req.body.actions[0].value;
-            const channelId = req.body.channel.id;
+          if (payload.actions && payload.actions[0].action_id === 'complete_item') {
+            const notionId = payload.actions[0].value;
+            const channelId = payload.channel.id;
             const notionClient = new NotionClient();
             
             console.log('完了ボタン押下:', notionId);
@@ -58,7 +72,7 @@ export default async function handler(req, res) {
         } catch (error) {
           console.error('インタラクティブコンポーネント処理エラー:', error);
           await slackClient.chat.postMessage({
-            channel: req.body.channel.id,
+            channel: payload.channel.id,
             text: '完了処理でエラーが発生しました。'
           });
         }
