@@ -31,6 +31,41 @@ export default async function handler(req, res) {
         });
       }
 
+      // インタラクティブコンポーネントの処理（ボタン押下など）
+      if (req.body && req.body.type === 'interactive_message' || req.body.type === 'block_actions') {
+        console.log('=== インタラクティブコンポーネント受信 ===');
+        console.log('ペイロード:', JSON.stringify(req.body, null, 2));
+        console.log('========================');
+        
+        const slackClient = new WebClient(process.env.SLACK_BOT_TOKEN);
+        
+        try {
+          // 完了ボタンの処理
+          if (req.body.actions && req.body.actions[0].action_id === 'complete_item') {
+            const notionId = req.body.actions[0].value;
+            const channelId = req.body.channel.id;
+            const notionClient = new NotionClient();
+            
+            console.log('完了ボタン押下:', notionId);
+            
+            const itemName = await notionClient.completeItem(notionId);
+            
+            await slackClient.chat.postMessage({
+              channel: channelId,
+              text: `✅ 完了しました: ${itemName}`
+            });
+          }
+        } catch (error) {
+          console.error('インタラクティブコンポーネント処理エラー:', error);
+          await slackClient.chat.postMessage({
+            channel: req.body.channel.id,
+            text: '完了処理でエラーが発生しました。'
+          });
+        }
+        
+        return res.status(200).json({ ok: true });
+      }
+      
       // 通常のSlackイベント処理
       console.log('Processing Slack event');
       
