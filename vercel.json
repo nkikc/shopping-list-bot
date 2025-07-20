@@ -1,15 +1,18 @@
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "index.js",
-      "use": "@vercel/node"
+  "functions": {
+    "api/slack.js": {
+      "maxDuration": 30
     }
-  ],
+  },
   "routes": [
     {
+      "src": "/api/slack",
+      "dest": "/api/slack.js"
+    },
+    {
       "src": "/(.*)",
-      "dest": "/index.js"
+      "dest": "/api/slack.js"
     }
   ],
   "env": {
